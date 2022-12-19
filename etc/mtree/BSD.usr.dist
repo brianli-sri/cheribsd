@@ -77,6 +77,8 @@
             ..
         ..
     ..
+    lib128
+    ..
     libdata
         gcc
         ..

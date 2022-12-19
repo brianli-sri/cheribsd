@@ -26,6 +26,24 @@ SUBDIR_BOOTSTRAP= \
 	libssp_nonshared \
 	msun
 
+.if !${MACHINE_ABI:Mpurecap} && ${MACHINE_CPUARCH} == "aarch64"
+SUBDIR_BOOTSTRAP+= \
+	libc_p128 \
+	libcompiler_rt_p128 \
+	libgcc_eh_p128 \
+	libgcc_s_p128
+
+.if ${MK_CXX} != "no"
+SUBDIR_BOOTSTRAP+= \
+	cheri-libc++_p128 \
+	cheri-libc++experimental_p128 \
+	libcxxrt_p128
+.endif
+
+SUBDIR_BOOTSTRAP+= \
+	msun_p128
+.endif
+
 # The main list; please keep these sorted alphabetically.
 # The only exception is sqlite3: we place it at the start of the list since it
 # takes a long time to build and starting it first improves parallelism.
@@ -115,6 +133,10 @@ SUBDIR=	${SUBDIR_BOOTSTRAP} \
 
 .if ${MACHINE_ABI:Mpurecap} && ${MACHINE_CPUARCH} == "aarch64" && !defined(COMPAT_CHERI)
 SUBDIR+=	libc_c18n libthr_c18n
+.endif
+
+.if !${MACHINE_ABI:Mpurecap} && ${MACHINE_CPUARCH} == "aarch64"
+SUBDIR+=	libthr_p128
 .endif
 
 .if !${MACHINE_ABI:Mpurecap}

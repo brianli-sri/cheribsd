@@ -395,7 +395,7 @@ _init_tls(void)
 {
 #ifndef PIC
 #ifndef __CHERI_PURE_CAPABILITY__
-	Elf_Addr *sp;
+	uintptr_t *sp;
 #endif
 	Elf_Auxinfo *aux, *auxp;
 	Elf_Phdr *phdr;
@@ -404,7 +404,7 @@ _init_tls(void)
 	void *tls;
 
 #ifndef __CHERI_PURE_CAPABILITY__
-	sp = (Elf_Addr *) environ;
+	sp = (uintptr_t *) environ;
 	while (*sp++ != 0)
 		;
 	aux = (Elf_Auxinfo *) sp;
