@@ -88,6 +88,7 @@ SYSCTL_INT(_machdep, OID_AUTO, log_user_cheri_exceptions, CTLFLAG_RWTUN,
 
 /* Called from exception.S */
 void do_el1h_sync(struct thread *, struct trapframe *);
+void do_el1t_sync(struct thread *, struct trapframe *);
 void do_el0_sync(struct thread *, struct trapframe *);
 void do_el0_error(struct trapframe *);
 void do_serror(struct trapframe *);
@@ -683,6 +684,13 @@ do_el1h_sync(struct thread *td, struct trapframe *frame)
 		panic("Unknown kernel exception %x esr_el1 %lx", exception,
 		    esr);
 	}
+}
+
+void
+do_el1t_sync(struct thread *td, struct trapframe *frame)
+{
+
+    do_el1h_sync(td, frame);
 }
 
 void

@@ -27,6 +27,7 @@
 
 #include <machine/asm.h>
 #include <machine/armreg.h>
+#include <machine/cherireg.h>
 __FBSDID("$FreeBSD$");
 
 #include "assym.inc"
@@ -38,9 +39,11 @@ __FBSDID("$FreeBSD$");
  * slot that is 32 instructions long. We need one for the branch, and three
  * for the prologue.
  */
-.macro	save_registers_head el
+.macro	save_registers_head el, sp0
 .if \el == 1
+.if \sp0 == 0
 	mov	PTR(18), PTRN(sp)
+.endif
 	stp	CAP(0),  CAP(1),  [PTRN(sp), #(TF_X - TF_SIZE - 128)]!
 .else
 	stp	CAP(0),  CAP(1),  [PTRN(sp), #(TF_X - TF_SIZE)]!
@@ -59,8 +62,14 @@ __FBSDID("$FreeBSD$");
 	stp	CAP(24), CAP(25), [PTRN(sp), #(24 * CAP_WIDTH)]
 	stp	CAP(26), CAP(27), [PTRN(sp), #(26 * CAP_WIDTH)]
 	stp	CAP(28), CAP(29), [PTRN(sp), #(28 * CAP_WIDTH)]
-.if \el == 0
+.if \el == 0 || \sp0 == 1
 	mrs	CAP(18), CAPN(sp_el0)
+.endif
+.if \sp0 == 1
+	gcperm	x13, CAP(10)
+	tbnz	x13, #CHERI_PERM_EXECUTIVE_BIT, 1f
+	mrs	CAP(18), rcsp_el0
+1:
 .endif
 #if __has_feature(capabilities)
 	mrs	c9, ddc_el0
@@ -77,10 +86,10 @@ __FBSDID("$FreeBSD$");
 	stp	x10, x11, [sp, #(TF_ELR)]
 #endif
 	stp	x12, x13, [PTRN(sp), #(TF_ESR)]
-	mrs	PTR(18), PTRN(tpidr_el1)
 .endm
 
 .macro	save_registers el
+	mrs	PTR(18), PTRN(tpidr_el1)
 .if \el == 0
 #if defined(PERTHREAD_SSP)
 	/* Load the SSP canary to sp_el0 */
@@ -91,10 +100,10 @@ __FBSDID("$FreeBSD$");
 
 	/* Apply the SSBD (CVE-2018-3639) workaround if needed */
 	ldr	PTR(1), [PTR(18), #PC_SSBD]
-	cbz	x1, 1f
+	cbz	x1, 2f
 	mov	w0, #1
 	blr	PTR(1)
-1:
+2:
 
 #ifdef PAC
 	ldr	PTR(0), [PTR(18), #PC_CURTHREAD]
@@ -116,7 +125,7 @@ __FBSDID("$FreeBSD$");
 .endif
 .endm
 
-.macro	restore_registers el
+.macro	restore_registers el, sp0 = 0
 	/*
 	 * Mask all exceptions, x18 may change in the interrupt exception
 	 * handler.
@@ -146,9 +155,17 @@ __FBSDID("$FreeBSD$");
 #else
 	ldp	x10, x11, [sp, #(TF_ELR)]
 #endif
-.if \el == 0
+.if \sp0 == 1
+	gcperm	x13, CAP(10)
+	tbnz	x13, #CHERI_PERM_EXECUTIVE_BIT, 2f
+	msr	rcsp_el0, CAP(18)
+	b	3f
+2:
+.endif
+.if \el == 0 || \sp0 == 1
 	msr	CAPN(sp_el0), CAP(18)
 .endif
+3:
 	msr	spsr_el1, x11
 	msr	CAPN(elr_el1), CAP(10)
 #if __has_feature(capabilities)
@@ -186,7 +203,7 @@ __FBSDID("$FreeBSD$");
 .if \el == 0
 	add	PTRN(sp), PTRN(sp), #(TF_SIZE)
 .else
-	mov	PTRN(sp), PTR(18)
+	add	PTRN(sp), PTRN(sp), #(128 + TF_SIZE)
 	mrs	PTR(18), PTRN(tpidr_el1)
 .endif
 .endm
@@ -219,6 +236,23 @@ __FBSDID("$FreeBSD$");
 	b	1b
 2:
 .endm
+
+ENTRY(handle_el1t_sync)
+	save_registers 1
+	ldr	PTR(0), [PTR(18), #PC_CURTHREAD]
+	mov	PTR(1), PTRN(sp)
+	bl	do_el1t_sync
+	restore_registers 1 1
+	ERET
+END(handle_el1t_sync)
+
+ENTRY(handle_el1t_irq)
+	save_registers 1
+	mov	PTR(0), PTRN(sp)
+	bl	intr_irq_handler
+	restore_registers 1 1
+	ERET
+END(handle_el1t_irq)
 
 ENTRY(handle_el1h_sync)
 	save_registers 1
@@ -271,9 +305,9 @@ ENTRY(handle_empty_exception)
 	b	1b
 END(handle_empty_exception)
 
-.macro	vector	name, el
+.macro	vector	name, el, sp0 = 0
 	.align 7
-	save_registers_head \el
+	save_registers_head \el, \sp0
 	b	handle_\name
 	dsb	sy
 	isb
@@ -288,10 +322,10 @@ END(handle_empty_exception)
 	.align 11
 	.globl exception_vectors
 exception_vectors:
-	vempty 1		/* Synchronous EL1t */
-	vempty 1		/* IRQ EL1t */
+	vector el1t_sync 1 1	/* Synchronous EL1t */
+	vector el1t_irq 1 1	/* IRQ EL1t */
 	vempty 1		/* FIQ EL1t */
-	vempty 1		/* Error EL1t */
+	vector serror 1 1	/* Error EL1t */
 
 	vector el1h_sync 1	/* Synchronous EL1h */
 	vector el1h_irq 1	/* IRQ EL1h */
