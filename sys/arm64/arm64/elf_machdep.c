@@ -47,6 +47,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/syscall.h>
 #include <sys/signalvar.h>
 #include <sys/vnode.h>
+#include <sys/compartment.h>
 
 #include <vm/vm.h>
 #include <vm/vm_param.h>
@@ -184,7 +185,7 @@ reloc_instr_imm(Elf32_Addr *where, Elf_Addr val, u_int msb, u_int lsb)
 static uintcap_t __nosanitizecoverage
 build_cap_from_fragment(Elf_Addr *fragment, Elf_Addr relocbase,
     Elf_Addr offset, void * __capability data_cap,
-    const void * __capability code_cap)
+    const void * __capability code_cap, bool compartment)
 {
 	Elf_Addr addr, size;
 	uint8_t perms;
@@ -212,7 +213,10 @@ build_cap_from_fragment(Elf_Addr *fragment, Elf_Addr relocbase,
 	}
 	cap += offset;
 	if (perms == MORELLO_FRAG_EXECUTABLE) {
-		cap = cheri_sealentry(cap);
+		if (compartment)
+			cap = (uintcap_t)compartment_call((uintptr_t)cap);
+		else
+			cap = cheri_sealentry(cap);
 	}
 	KASSERT(cheri_gettag(cap) != 0,
 	    ("Relocation produce invalid capability %#lp",
@@ -233,7 +237,7 @@ elf_reloc_internal(linker_file_t lf, char *relocbase, const void *data,
 #define	ARM64_ELF_RELOC_LATE_IFUNC	(1 << 1)
 	Elf_Addr *where, addr, addend;
 #if __has_feature(capabilities)
-	uintcap_t cap;
+	uintcap_t cap, oldcap;
 #endif
 #ifndef __CHERI_PURE_CAPABILITY__
 	Elf_Addr val;
@@ -283,7 +287,12 @@ elf_reloc_internal(linker_file_t lf, char *relocbase, const void *data,
 			cap = build_cap_from_fragment(where,
 			    (Elf_Addr)relocbase, addend,
 			    (__cheri_tocap void * __capability)relocbase,
-			    (__cheri_tocap void * __capability)relocbase);
+			    (__cheri_tocap void * __capability)relocbase,
+			    lf->compartment);
+			/*
+			 * NB: we do not seal cap as it's sealed when relocating
+			 * external relocations.
+			 */
 			*(uintcap_t *)(void *)where = cap;
 		}
 #endif
@@ -339,10 +348,33 @@ elf_reloc_internal(linker_file_t lf, char *relocbase, const void *data,
 		break;
 #if __has_feature(capabilities)
 	case R_MORELLO_RELATIVE:
+		/*
+		 * A compartment policy might not have been loaded at the time
+		 * an R_MORELLO_RELATIVE relocation was relocated.
+		 *
+		 * Replace a code capability with a compartment call capability,
+		 * if required by the loaded policy.
+		 */
+		oldcap = *(uintcap_t *)where;
+		KASSERT(cheri_gettag(oldcap) != 0,
+		    ("R_MORELLO_RELATIVE relocation wasn't processed with ARM64_ELF_RELOC_LOCAL"));
+		if ((cheri_getperm(oldcap) & CHERI_PERM_EXECUTE) != 0 &&
+		    lf->compartment) {
+			cap = (uintcap_t)relocbase;
+			cap = cheri_copyaddress(cap, oldcap);
+			cap = cheri_andperm(cap, cheri_getperm(oldcap));
+			cap = (uintcap_t)compartment_call((uintptr_t)cap);
+			*(uintcap_t *)where = cap;
+		}
 		break;
 #ifdef __CHERI_PURE_CAPABILITY__
 	case R_MORELLO_CAPINIT:
 	case R_MORELLO_GLOB_DAT:
+		/*
+		 * XXXKW: module_register_init and other SYSINIT functions
+		 * have capinit relocations. These functions are called from the
+		 * kernel code (the executive mode).
+		 */
 		error = LINKER_SYMIDX_CAPABILITY(lf, symidx, 1, &cap);
 		if (error != 0)
 			return (-1);
@@ -356,21 +388,28 @@ elf_reloc_internal(linker_file_t lf, char *relocbase, const void *data,
 		cap = cheri_clearperm(cap, CHERI_PERM_SEAL |
 		    CHERI_PERM_STORE | CHERI_PERM_STORE_CAP |
 		    CHERI_PERM_STORE_LOCAL_CAP);
-		*(uintcap_t *)where = cheri_sealentry(cap);
+		if (lf->compartment)
+			cap = (uintcap_t)compartment_jump(cap);
+		else
+			cap = cheri_sealentry(cap);
+		*(uintcap_t *)where = cap;
 		break;
 	case R_MORELLO_IRELATIVE:
 		/* XXX: See libexec/rtld-elf/aarch64/reloc.c. */
 		if ((where[0] == 0 && where[1] == 0) ||
 		    (Elf_Ssize)where[0] == rela->r_addend) {
+			KASSERT(!lf->compartment,
+			    ("The old R_MORELLO_IRELATIVE ABI is not supported in compartments"));
 			cap = (uintptr_t)(relocbase + rela->r_addend);
 			cap = cheri_clearperm(cap, CHERI_PERM_SEAL |
 			    CHERI_PERM_STORE | CHERI_PERM_STORE_CAP |
 			    CHERI_PERM_STORE_LOCAL_CAP);
 			cap = cheri_sealentry(cap);
-		} else
+		} else {
 			cap = build_cap_from_fragment(where,
 			    (Elf_Addr)relocbase, rela->r_addend,
-			    relocbase, relocbase);
+			    relocbase, relocbase, lf->compartment);
+		}
 		cap = ((uintptr_t (*)(void))cap)();
 		*(uintcap_t *)where = cap;
 		break;
@@ -468,7 +507,7 @@ elf_reloc_self(const Elf_Dyn *dynp, void *data_cap, const void *code_cap)
 
 		fragment = (Elf_Addr *)((char *)data_cap + rela->r_offset);
 		cap = build_cap_from_fragment(fragment, 0, rela->r_addend,
-		    data_cap, code_cap);
+		    data_cap, code_cap, false);
 		*((uintptr_t *)fragment) = cap;
 	}
 }
