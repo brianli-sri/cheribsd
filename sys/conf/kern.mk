@@ -152,7 +152,7 @@ INLINE_LIMIT?=	8000
 
 .if ${MACHINE_CPU:Mcheri}
 CFLAGS+=	-march=morello
-CFLAGS+=	-Xclang -morello-vararg=new
+CFLAGS+=	-Xclang -morello-vararg=new -Xclang -morello-bounded-memargs
 .endif
 
 .if ${MACHINE_ARCH:Maarch*c*}
