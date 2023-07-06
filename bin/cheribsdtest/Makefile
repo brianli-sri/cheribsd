@@ -20,6 +20,13 @@ SUBDIR+=	mt-c18n
 .endif
 .endif
 
+.if ${MK_LIB64CB} == "yes"
+SUBDIR+=	purecap-benchmark \
+		purecap-benchmark-dynamic \
+		purecap-benchmark-dynamic-mt \
+		purecap-benchmark-mt
+.endif
+
 SUBDIR_PARALLEL=
 
 .include <bsd.subdir.mk>

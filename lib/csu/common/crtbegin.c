@@ -25,6 +25,9 @@
 __FBSDID("$FreeBSD$");
 
 #include <sys/param.h>
+#ifdef __ARM_MORELLO_PURECAP_BENCHMARK_ABI
+#include <sys/elf.h>
+#endif
 
 #include "crt.h"
 
@@ -127,4 +130,19 @@ asm (
     ".popsection		\n"
 );
 #endif
+#endif
+
+/* XXX: TEMPORARY */
+#ifdef __ARM_MORELLO_PURECAP_BENCHMARK_ABI
+asm (
+"	.pushsection .note.cheri,\"a\",%note\n"
+"	.p2align	2\n"
+"	.4byte		2f-1f\n"
+"	.4byte		0\n"
+"	.4byte		" __XSTRING(NT_CHERI_MORELLO_PURECAP_BENCHMARK_ABI) "\n"
+"1:	.asciz		\"" ELF_NOTE_CHERI "\"\n"
+"2:	.p2align	2\n"
+"3:\n"
+"	.popsection\n"
+);
 #endif

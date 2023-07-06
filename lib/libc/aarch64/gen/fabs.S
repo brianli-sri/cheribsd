@@ -28,5 +28,5 @@ __FBSDID("$FreeBSD$");
 
 ENTRY(fabs)
 	fabs d0, d0
-	ret
+	RETURN
 END(fabs)

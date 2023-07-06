@@ -1,9 +1,8 @@
 /*-
- * Copyright (c) 2014 Andrew Turner
- * Copyright (c) 2015 The FreeBSD Foundation
+ * Copyright (c) 2014 The FreeBSD Foundation
  *
- * This software was developed by Andrew Turner under
- * sponsorship from the FreeBSD Foundation.
+ * This software was developed by Andrew Turner under sponsorship from
+ * the FreeBSD Foundation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -25,55 +24,52 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
+#include "assym.inc"
 #include <sys/syscall.h>
 #include <machine/asm.h>
 
-#define	_SYSCALL(name)						\
-	mov	x8, SYS_ ## name;				\
+/*
+ * sigcode has to be labeled as an #object type so that the symbols
+ * resolve to the correct address as a source for copies.  This also
+ * ensures that captable pointers to it will be able to read it.  This
+ * is fine as the code is never executed directly in the kernel, just
+ * copied to places for userland to execute.
+ */
+#define	SIGCODE(sym)						\
+	.section .rodata; .globl sym; .align 2; .type sym,#object; sym:	\
+	.cfi_startproc
+
+SIGCODE(freebsd64cb_sigcode)
+#ifndef __CHERI_PURE_CAPABILITY__
+	.arch_extension c64
+#endif
+	blr	x8
+	add	c0, csp, #SF_UC
+
+1:
+	mov	x8, #SYS_sigreturn
 	svc	0
 
-#define	SYSCALL(name)						\
-ENTRY(__sys_##name);						\
-	WEAK_REFERENCE(__sys_##name, name);			\
-	WEAK_REFERENCE(__sys_##name, _##name);			\
-	_SYSCALL(name);						\
-	RETURN;							\
-END(__sys_##name)
+	/* sigreturn failed, exit */
+	mov	x8, #SYS_exit
+	svc	0
 
-/*
- * Conditional jumps can only go up to one megabyte in either
- * direction, and cerror can be located anywhere, so we have
- * to jump around to use more capable unconditional branch
- * instruction.
- */
-#define	PSEUDO(name)						\
-ENTRY(__sys_##name);						\
-	WEAK_REFERENCE(__sys_##name, _##name);			\
-	_SYSCALL(name);						\
-	b.cs	1f;						\
-	RETURN;							\
-1:	b	cerror;						\
-END(__sys_##name)
+	b	1b
+#ifndef __CHERI_PURE_CAPABILITY__
+	.arch_extension noc64
+	.arch_extension a64c
+#endif
+	/* This may be copied to the stack, keep it 16-byte aligned */
+	.align	3
+END(freebsd64cb_sigcode)
+freebsd64cb_esigcode:
 
-#define	RSYSCALL(name)						\
-ENTRY(__sys_##name);						\
-	WEAK_REFERENCE(__sys_##name, name);			\
-	WEAK_REFERENCE(__sys_##name, _##name);			\
-	_SYSCALL(name);						\
-	b.cs	1f;						\
-	RETURN;							\
-1:	b	cerror;						\
-END(__sys_##name)
-
-/* Do a system call where the _x() is also custom (e.g. fcntl, ioctl) */
-#define	NO_UNDERSCORE(name)					\
-ENTRY(__sys_##name);						\
-	_SYSCALL(name);						\
-	b.cs	1f;						\
-	RETURN;							\
-1:	b	cerror;						\
-END(__sys_##name)
+	.data
+	.align	3
+	.global	freebsd64cb_szsigcode
+	.type	freebsd64cb_szsigcode,#object
+	.size	freebsd64cb_szsigcode, 8
+freebsd64cb_szsigcode:
+	.quad	freebsd64cb_esigcode - freebsd64cb_sigcode

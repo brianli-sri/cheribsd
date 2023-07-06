@@ -61,6 +61,13 @@ u_long __read_frequently elf_hwcap2;
 
 struct arm64_addr_mask elf64_addr_mask;
 
+#if __has_feature(capabilities)
+static bool	elf64c_header_supported(const struct image_params *imgp,
+    const int32_t *osrel, const uint32_t *fctl0);
+static bool	elf64cb_header_supported(const struct image_params *imgp,
+    const int32_t *osrel, const uint32_t *fctl0);
+#endif
+
 static struct sysentvec elf64_freebsd_sysvec = {
 	.sv_size	= SYS_MAXSYSCALL,
 	.sv_table	= sysent,
@@ -126,11 +133,116 @@ static __ElfN(Brandinfo) freebsd_brand_info = {
 	.interp_newpath	= NULL,
 #endif
 	.brand_note	= &__elfN(freebsd_brandnote),
-	.flags		= BI_CAN_EXEC_DYN | BI_BRAND_NOTE
+	.flags		= BI_CAN_EXEC_DYN | BI_BRAND_NOTE,
+#if __has_feature(capabilities)
+	.header_supported = &elf64c_header_supported,
+#endif
 };
 
 SYSINIT(elf64, SI_SUB_EXEC, SI_ORDER_FIRST,
     (sysinit_cfunc_t)__elfN(insert_brand_entry), &freebsd_brand_info);
+
+#if __has_feature(capabilities)
+static struct sysentvec elf64cb_freebsd_sysvec = {
+	.sv_size	= SYS_MAXSYSCALL,
+	.sv_table	= sysent,
+	.sv_fixup	= __elfN(freebsd_fixup),
+	.sv_sendsig	= sendsig,
+	.sv_sigcode	= freebsd64cb_sigcode,
+	.sv_szsigcode	= &freebsd64cb_szsigcode,
+	.sv_name	= "FreeBSD ELF64CB",
+	.sv_coredump	= __elfN(coredump),
+	.sv_elf_core_osabi = ELFOSABI_FREEBSD,
+	.sv_elf_core_abi_vendor = FREEBSD_ABI_VENDOR,
+	.sv_elf_core_prepare_notes = __elfN(prepare_notes),
+	.sv_imgact_try	= NULL,
+	.sv_minsigstksz	= MINSIGSTKSZ,
+	.sv_minuser	= VM_MIN_ADDRESS,
+	.sv_maxuser	= VM_MAXUSER_ADDRESS,
+	.sv_usrstack	= USRSTACK,
+	.sv_psstringssz	= sizeof(struct ps_strings),
+	.sv_stackprot	= VM_PROT_RW_CAP,
+	.sv_copyout_auxargs = __elfN(freebsd_copyout_auxargs),
+	.sv_copyout_strings = exec_copyout_strings,
+	.sv_setregs	= exec_setregs,
+	.sv_fixlimit	= NULL,
+	.sv_maxssiz	= NULL,
+	.sv_flags	= SV_SHP | SV_TIMEKEEP | SV_ABI_FREEBSD | SV_LP64 |
+	    SV_RNG_SEED_VER | SV_CHERI | SV_UNBOUND_PCC,
+	.sv_set_syscall_retval = cpu_set_syscall_retval,
+	.sv_fetch_syscall_args = cpu_fetch_syscall_args,
+	.sv_syscallnames = syscallnames,
+	.sv_shared_page_base = SHAREDPAGE,
+	.sv_shared_page_len = PAGE_SIZE,
+	.sv_schedtail	= NULL,
+	.sv_thread_detach = NULL,
+	.sv_trap	= NULL,
+	.sv_hwcap	= &elf_hwcap,
+	.sv_hwcap2	= &elf_hwcap2,
+	.sv_onexec_old	= exec_onexec_old,
+	.sv_onexit	= exit_onexit,
+	.sv_regset_begin = SET_BEGIN(__elfN(regset)),
+	.sv_regset_end	= SET_LIMIT(__elfN(regset)),
+};
+INIT_SYSENTVEC(elf64cb_sysvec, &elf64cb_freebsd_sysvec);
+
+static __ElfN(Brandinfo) elf64cb_freebsd_brand_info = {
+	.brand		= ELFOSABI_FREEBSD,
+	.machine	= EM_AARCH64,
+	.compat_3_brand	= "FreeBSD",
+	.emul_path	= NULL,
+	.interp_path	= "/libexec/ld-elf.so.1",
+	.sysvec		= &elf64cb_freebsd_sysvec,
+	.interp_newpath	= "/libexec/ld-elf64cb.so.1",
+	.brand_note	= &__elfN(freebsd_brandnote),
+	.flags		= BI_CAN_EXEC_DYN | BI_BRAND_NOTE,
+#if __has_feature(capabilities)
+	.header_supported = &elf64cb_header_supported,
+#endif
+};
+
+SYSINIT(elf64cb, SI_SUB_EXEC, SI_ORDER_FIRST,
+    (sysinit_cfunc_t)__elfN(insert_brand_entry), &elf64cb_freebsd_brand_info);
+
+static Elf_Note elf64cb_note = {
+	.n_namesz = sizeof(ELF_NOTE_CHERI),
+	.n_descsz = 0,
+	.n_type = NT_CHERI_MORELLO_PURECAP_BENCHMARK_ABI
+};
+
+static bool
+elf64cb_note_cb(const Elf_Note *note, void *arg0 __unused, bool *res)
+{
+	*res = true;
+	return (true);
+}
+
+static bool
+elf64c_header_supported(const struct image_params *imgp,
+    const int32_t *osrel, const uint32_t *fctl0)
+{
+	return (!elf64cb_header_supported(imgp, osrel, fctl0));
+}
+
+static bool
+elf64cb_header_supported(const struct image_params *imgp,
+    const int32_t *osrel __unused, const uint32_t *fctl0 __unused)
+{
+	const __ElfN(Phdr) *phdr;
+	const __ElfN(Ehdr) *hdr;
+	int i;
+
+	hdr = (const Elf_Ehdr *)imgp->image_header;
+	phdr = (const Elf_Phdr *)(imgp->image_header + hdr->e_phoff);
+	for (i = 0; i < hdr->e_phnum; i++)
+		if (phdr[i].p_type == PT_NOTE && __elfN(parse_notes)(imgp,
+		    &elf64cb_note, ELF_NOTE_CHERI, &phdr[i], elf64cb_note_cb,
+		    NULL))
+			return (true);
+
+	return (false);
+}
+#endif
 
 static bool
 get_arm64_addr_mask(struct regset *rs, struct thread *td, void *buf,
