@@ -1565,8 +1565,8 @@ CHERIBSDTEST(cheri_revoke_loadside, "Test load-side revoker")
 	 * walks.
 	 */
 	cyc_start = get_cyclecount();
-	CHERIBSDTEST_CHECK_SYSCALL(cheri_revoke(CHERI_REVOKE_FORCE_LOAD_SIDE |
-	    CHERI_REVOKE_IGNORE_START | CHERI_REVOKE_TAKE_STATS, 0, &crsi));
+	CHERIBSDTEST_CHECK_SYSCALL(cheri_revoke(CHERI_REVOKE_IGNORE_START |
+	    CHERI_REVOKE_TAKE_STATS, 0, &crsi));
 	cyc_end = get_cyclecount();
 	fprintf_cheri_revoke_stats(stderr, crsi, cyc_end - cyc_start);
 
@@ -1627,8 +1627,8 @@ CHERIBSDTEST(cheri_revoke_loadside, "Test load-side revoker")
 	 */
 	cyc_start = get_cyclecount();
 	CHERIBSDTEST_CHECK_SYSCALL(
-	    cheri_revoke(CHERI_REVOKE_FORCE_LOAD_SIDE | CHERI_REVOKE_LAST_PASS |
-	        CHERI_REVOKE_IGNORE_START | CHERI_REVOKE_TAKE_STATS, 0, &crsi));
+	    cheri_revoke(CHERI_REVOKE_LAST_PASS | CHERI_REVOKE_IGNORE_START |
+		CHERI_REVOKE_TAKE_STATS, 0, &crsi));
 	cyc_end = get_cyclecount();
 	fprintf_cheri_revoke_stats(stderr, crsi, cyc_end - cyc_start);
 
@@ -1646,8 +1646,8 @@ CHERIBSDTEST(cheri_revoke_loadside, "Test load-side revoker")
 	 */
 	cyc_start = get_cyclecount();
 	CHERIBSDTEST_CHECK_SYSCALL(
-	    cheri_revoke(CHERI_REVOKE_FORCE_LOAD_SIDE | CHERI_REVOKE_LAST_PASS |
-	        CHERI_REVOKE_IGNORE_START | CHERI_REVOKE_TAKE_STATS, 0, &crsi));
+	    cheri_revoke(CHERI_REVOKE_LAST_PASS | CHERI_REVOKE_IGNORE_START |
+	        CHERI_REVOKE_TAKE_STATS, 0, &crsi));
 	cyc_end = get_cyclecount();
 	fprintf_cheri_revoke_stats(stderr, crsi, cyc_end - cyc_start);
 
@@ -1836,11 +1836,7 @@ cheribsdtest_cheri_revoke_lib_run(
 
 			switch(mode) {
 			case TCLR_MODE_LOAD_ONCE:
-				crflags |= CHERI_REVOKE_LAST_PASS |
-				    CHERI_REVOKE_FORCE_LOAD_SIDE;
-				break;
-			case TCLR_MODE_LOAD_SPLIT:
-				crflags |= CHERI_REVOKE_FORCE_LOAD_SIDE;
+				crflags |= CHERI_REVOKE_LAST_PASS;
 				break;
 			}
 
