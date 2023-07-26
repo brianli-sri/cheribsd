@@ -1303,26 +1303,10 @@ CHERIBSDTEST(vm_capdirty, "verify capdirty marking and mincore")
 #undef CHERIBSDTEST_VM_CAPDIRTY_NPG
 }
 
+#ifdef CHERI_REVOKE
 /*
  * Revocation tests
  */
-
-#ifdef CHERI_REVOKE
-
-/* Ick */
-static inline uint64_t
-get_cyclecount()
-{
-#if defined(__riscv)
-	return __builtin_readcyclecounter();
-#elif defined(__aarch64__)
-	uint64_t count;
-	__asm __volatile("mrs %0, cntvct_el0" : "=&r" (count));
-	return count;
-#else
-	return 0;
-#endif
-}
 
 static int
 check_revoked(void * __capability r)
@@ -1363,65 +1347,6 @@ check_kqueue_cap(int kq, unsigned int valid)
 				"kqueue-held cap not as expected");
 }
 
-static void
-fprintf_cheri_revoke_stats(FILE *f, struct cheri_revoke_syscall_info crsi,
-    uint32_t cycsum)
-{
-	fprintf(f, "revoke:"
-		" edeq=%" PRIu64
-		" eenq=%" PRIu64
-
-		" psro=%" PRIu32
-		" psrw=%" PRIu32
-
-		" pfro=%" PRIu32
-		" pfrw=%" PRIu32
-
-		" pclg=%" PRIu32
-
-		" pskf=%" PRIu32
-		" pskn=%" PRIu32
-		" psks=%" PRIu32
-
-		" cfnd=%" PRIu32
-		" cfrv=%" PRIu32
-		" cnuk=%" PRIu32
-
-		" lscn=%" PRIu32
-		" pmkc=%" PRIu32
-
-		" pcyc=%" PRIu64
-		" fcyc=%" PRIu64
-		" tcyc=%" PRIu32
-		"\n",
-
-		crsi.epochs.dequeue,
-		crsi.epochs.enqueue,
-
-		crsi.stats.pages_scan_ro,
-		crsi.stats.pages_scan_rw,
-
-		crsi.stats.pages_faulted_ro,
-		crsi.stats.pages_faulted_rw,
-
-		crsi.stats.fault_visits,
-
-		crsi.stats.pages_skip_fast,
-		crsi.stats.pages_skip_nofill,
-		crsi.stats.pages_skip,
-
-		crsi.stats.caps_found,
-		crsi.stats.caps_found_revoked,
-		crsi.stats.caps_cleared,
-
-		crsi.stats.lines_scan,
-		crsi.stats.pages_mark_clean,
-
-		crsi.stats.page_scan_cycles,
-		crsi.stats.fault_cycles,
-		cycsum);
-}
-
 CHERIBSDTEST(cheri_revoke_lightly,
     "A gentle test of capability revocation")
 {
@@ -1431,7 +1356,6 @@ CHERIBSDTEST(cheri_revoke_lightly,
 	void * __capability revme;
 	struct cheri_revoke_syscall_info crsi;
 	int kq;
-	uint32_t cyc_start, cyc_end;
 
 	kq = CHERIBSDTEST_CHECK_SYSCALL(kqueue());
 	mb = CHERIBSDTEST_CHECK_SYSCALL(
@@ -1457,12 +1381,9 @@ CHERIBSDTEST(cheri_revoke_lightly,
 	crsi.epochs.enqueue = 0xC0FFEE;
 	crsi.epochs.dequeue = 0xB00;
 
-	cyc_start = get_cyclecount();
 	CHERIBSDTEST_CHECK_SYSCALL(
 	    cheri_revoke(CHERI_REVOKE_LAST_PASS | CHERI_REVOKE_IGNORE_START |
 	    CHERI_REVOKE_TAKE_STATS , 0, &crsi));
-	cyc_end = get_cyclecount();
-	fprintf_cheri_revoke_stats(stderr, crsi, cyc_end - cyc_start);
 
 	CHERIBSDTEST_VERIFY2(
 	    cri->epochs.dequeue == crsi.epochs.dequeue,
@@ -1485,11 +1406,8 @@ CHERIBSDTEST(cheri_revoke_lightly,
 	((void * __capability *)mb)[1] = revme;
 	install_kqueue_cap(kq, revme);
 
-	cyc_start = get_cyclecount();
 	CHERIBSDTEST_CHECK_SYSCALL(cheri_revoke(CHERI_REVOKE_IGNORE_START |
 	    CHERI_REVOKE_TAKE_STATS, 0, &crsi));
-	cyc_end = get_cyclecount();
-	fprintf_cheri_revoke_stats(stderr, crsi, cyc_end - cyc_start);
 
 	CHERIBSDTEST_VERIFY2(
 	    crsi.epochs.enqueue >= crsi.epochs.dequeue + 1,
@@ -1499,12 +1417,9 @@ CHERIBSDTEST(cheri_revoke_lightly,
 	    cri->epochs.dequeue == crsi.epochs.dequeue,
 	    "Bad shared clock");
 
-	cyc_start = get_cyclecount();
 	CHERIBSDTEST_CHECK_SYSCALL(
 	    cheri_revoke(CHERI_REVOKE_LAST_PASS | CHERI_REVOKE_TAKE_STATS,
 	    crsi.epochs.enqueue, &crsi));
-	cyc_end = get_cyclecount();
-	fprintf_cheri_revoke_stats(stderr, crsi, cyc_end - cyc_start);
 
 	CHERIBSDTEST_VERIFY2(
 	    cri->epochs.dequeue == crsi.epochs.dequeue,
@@ -1529,7 +1444,6 @@ CHERIBSDTEST(cheri_revoke_loadside, "Test load-side revoker")
 	const volatile struct cheri_revoke_info * __capability cri;
 	void * __capability revme;
 	struct cheri_revoke_syscall_info crsi;
-	uint32_t cyc_start, cyc_end;
 	unsigned char mcv[CHERIBSDTEST_VM_CHERI_REVOKE_LOADSIDE_NPG] = { 0 };
 	const size_t asz = CHERIBSDTEST_VM_CHERI_REVOKE_LOADSIDE_NPG *
 	    PAGE_SIZE;
@@ -1564,11 +1478,8 @@ CHERIBSDTEST(cheri_revoke_loadside, "Test load-side revoker")
 	 * Begin load side.  This should be pretty speedy since we do no VM
 	 * walks.
 	 */
-	cyc_start = get_cyclecount();
 	CHERIBSDTEST_CHECK_SYSCALL(cheri_revoke(CHERI_REVOKE_IGNORE_START |
 	    CHERI_REVOKE_TAKE_STATS, 0, &crsi));
-	cyc_end = get_cyclecount();
-	fprintf_cheri_revoke_stats(stderr, crsi, cyc_end - cyc_start);
 
 	/*
 	 * Try to induce a read fault and check that the read result is revoked.
@@ -1595,12 +1506,9 @@ CHERIBSDTEST(cheri_revoke_loadside, "Test load-side revoker")
 	/*
 	 * Now do the background sweep and wait for everything to finish
 	 */
-	cyc_start = get_cyclecount();
 	CHERIBSDTEST_CHECK_SYSCALL(
 	    cheri_revoke(CHERI_REVOKE_LAST_PASS | CHERI_REVOKE_IGNORE_START |
 		CHERI_REVOKE_TAKE_STATS, 0, &crsi));
-	cyc_end = get_cyclecount();
-	fprintf_cheri_revoke_stats(stderr, crsi, cyc_end - cyc_start);
 
 	CHERIBSDTEST_CHECK_SYSCALL(mincore(mb, asz, &mcv[0]));
 	CHERIBSDTEST_VERIFY2(
@@ -1625,12 +1533,9 @@ CHERIBSDTEST(cheri_revoke_loadside, "Test load-side revoker")
 	 * on it are revoked.  Page 1, having previously been capstore, is now
 	 * capclean.
 	 */
-	cyc_start = get_cyclecount();
 	CHERIBSDTEST_CHECK_SYSCALL(
 	    cheri_revoke(CHERI_REVOKE_LAST_PASS | CHERI_REVOKE_IGNORE_START |
 		CHERI_REVOKE_TAKE_STATS, 0, &crsi));
-	cyc_end = get_cyclecount();
-	fprintf_cheri_revoke_stats(stderr, crsi, cyc_end - cyc_start);
 
 	CHERIBSDTEST_VERIFY2(check_revoked(mb[1]),
 	    "Revoker failure in full pass");
@@ -1644,12 +1549,9 @@ CHERIBSDTEST(cheri_revoke_loadside, "Test load-side revoker")
 	/*
 	 * Do that again so that we end with an odd CLG.
 	 */
-	cyc_start = get_cyclecount();
 	CHERIBSDTEST_CHECK_SYSCALL(
 	    cheri_revoke(CHERI_REVOKE_LAST_PASS | CHERI_REVOKE_IGNORE_START |
 	        CHERI_REVOKE_TAKE_STATS, 0, &crsi));
-	cyc_end = get_cyclecount();
-	fprintf_cheri_revoke_stats(stderr, crsi, cyc_end - cyc_start);
 
 	CHERIBSDTEST_CHECK_SYSCALL(mincore(mb, asz, &mcv[0]));
 	CHERIBSDTEST_VERIFY2(
@@ -1746,7 +1648,6 @@ cheribsdtest_cheri_revoke_lib_run(
 
 	while (bigblock_offset < bigblock_caps) {
 		struct cheri_revoke_syscall_info crsi;
-		uint32_t cyc_start, cyc_end;
 		size_t csz;
 
 		switch (mode) {
@@ -1840,14 +1741,8 @@ cheribsdtest_cheri_revoke_lib_run(
 				break;
 			}
 
-			cyc_start = get_cyclecount();
 			CHERIBSDTEST_CHECK_SYSCALL(cheri_revoke(crflags, 0,
 			    &crsi));
-			cyc_end = get_cyclecount();
-			if (verbose > 2) {
-				fprintf_cheri_revoke_stats(stderr, crsi,
-				    cyc_end - cyc_start);
-			}
 			CHERIBSDTEST_VERIFY2(cri->epochs.dequeue ==
 			    crsi.epochs.dequeue, "Bad shared clock");
 		}
@@ -1885,15 +1780,9 @@ cheribsdtest_cheri_revoke_lib_run(
 
 		if (mode == TCLR_MODE_LOAD_SPLIT) {
 load_split_fini:
-			cyc_start = get_cyclecount();
 			CHERIBSDTEST_CHECK_SYSCALL(cheri_revoke(
 			    CHERI_REVOKE_LAST_PASS | CHERI_REVOKE_IGNORE_START |
 			    CHERI_REVOKE_TAKE_STATS, 0, &crsi));
-			cyc_end = get_cyclecount();
-			if (verbose > 2) {
-				fprintf_cheri_revoke_stats(stderr, crsi,
-				    cyc_end - cyc_start);
-			}
 			CHERIBSDTEST_VERIFY2(cri->epochs.dequeue ==
 			    crsi.epochs.dequeue, "Bad shared clock");
 		}
