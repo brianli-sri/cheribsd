@@ -1151,7 +1151,8 @@ _rtld(Elf_Addr *sp, func_ptr_type *exit_proc, Obj_Entry **objp)
     return ((func_ptr_type)tramp_intern(&(struct tramp_data) {
 	.target = cheri_sealentry(obj_main->entry),
 	.obj = obj_main,
-	.sig = (struct tramp_sig) { true, 3, false, NONE }
+	.sig = (struct tramp_sig) { .valid = true,
+	    .reg_args = 3, .mem_args = false, .ret_args = NONE }
     }));
 #else
     return ((func_ptr_type)obj_main->entry);
@@ -1170,7 +1171,8 @@ rtld_resolve_ifunc(const Obj_Entry *obj, const Elf_Sym *def)
 		.target = ptr,
 		.obj = obj,
 		.def = def,
-		.sig = (struct tramp_sig) { true, 8, false, C0 }
+		.sig = (struct tramp_sig) { .valid = true,
+		    .reg_args = 8, .mem_args = false, .ret_args = C0 }
 	});
 #endif
 	target = call_ifunc_resolver(ptr);
@@ -1186,7 +1188,6 @@ _rtld_bind(Obj_Entry *obj, Elf_Size reloff)
     uintptr_t *where;
     uintptr_t target;
     RtldLockState lockstate;
-
 #if defined(__CHERI_PURE_CAPABILITY__) && defined(RTLD_SANDBOX)
     obj = cheri_unseal(obj, sealer_pltgot);
 #endif
@@ -1230,7 +1231,8 @@ _rtld_bind(Obj_Entry *obj, Elf_Size reloff)
     target = (uintptr_t)tramp_intern(&(struct tramp_data) {
 	.target = (void *)target,
 	.obj = defobj,
-	.def = def
+	.def = def,
+	.sig = fetch_tramp_sig(obj, ELF_R_SYM(rel->r_info))
     });
 #endif
     target = reloc_jmpslot(where, target, defobj, obj, rel);
@@ -1506,6 +1508,13 @@ digest_dynamic1(Obj_Entry *obj, int early, const Elf_Dyn **dyn_rpath,
 	case DT_SYMENT:
 	    assert(dynp->d_un.d_val == sizeof(Elf_Sym));
 	    break;
+
+#if defined(__CHERI_PURE_CAPABILITY__) && defined(RTLD_SANDBOX)
+	case DT_CHERI_C18N_SIG:
+	    obj->sigtab = (const struct tramp_sig *)
+	      (obj->relocbase + dynp->d_un.d_ptr);
+	    break;
+#endif
 
 	case DT_STRTAB:
 	    obj->strtab = (const char *)(obj->relocbase + dynp->d_un.d_ptr);
@@ -2284,6 +2293,9 @@ find_symdef(unsigned long symnum, const Obj_Entry *refobj,
 	req.flags = flags;
 	ve = req.ventry = fetch_ventry(refobj, symnum);
 	req.lockstate = lockstate;
+#if defined(__CHERI_PURE_CAPABILITY__) && defined(RTLD_SANDBOX)
+	req.sig = fetch_tramp_sig(refobj, symnum);
+#endif
 	res = symlook_default(&req, refobj);
 	if (res == 0) {
 	    def = req.sym_out;
@@ -5261,8 +5273,7 @@ matched_symbol(SymLook *req, const Obj_Entry *obj, Sym_Match_Result *result,
 			    verndx == VER_NDX_GIVEN) {
 				result->sym_out = symp;
 				return (true);
-			}
-			else if (verndx >= VER_NDX_GIVEN) {
+			} else if (verndx >= VER_NDX_GIVEN) {
 				if ((obj->versyms[symnum] & VER_NDX_HIDDEN)
 				    == 0) {
 					if (result->vsymp == NULL)
@@ -6267,6 +6278,20 @@ fetch_ventry(const Obj_Entry *obj, unsigned long symnum)
     return (NULL);
 }
 
+#if defined(__CHERI_PURE_CAPABILITY__) && defined(RTLD_SANDBOX)
+struct tramp_sig
+fetch_tramp_sig(const Obj_Entry *obj, unsigned long symnum)
+{
+	if (obj->sigtab == NULL)
+		return ((struct tramp_sig) {});
+	else if (symnum < obj->dynsymcount)
+		return (obj->sigtab[symnum]);
+	else
+		rtld_fatal("Invalid symbol number %lu for object %s.",
+		    symnum, obj->path);
+}
+#endif
+
 int
 _rtld_get_stack_prot(void)
 {
@@ -6383,6 +6408,9 @@ symlook_init_from_req(SymLook *dst, const SymLook *src)
 	dst->hash_gnu = src->hash_gnu;
 	dst->ventry = src->ventry;
 	dst->flags = src->flags;
+#if defined(__CHERI_PURE_CAPABILITY__) && defined(RTLD_SANDBOX)
+	dst->sig = src->sig;
+#endif
 	dst->defobj_out = NULL;
 	dst->sym_out = NULL;
 	dst->lockstate = src->lockstate;
