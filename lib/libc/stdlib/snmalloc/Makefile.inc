@@ -7,8 +7,8 @@ SYM_MAPS+=	${LIBC_SRCTOP}/stdlib/snmalloc/Symbol.map
 # Specify the locations in contrib for headers.
 CXXFLAGS+=	-I${SRCTOP}/contrib/snmalloc/src/snmalloc
 
-# C++ dialect options.  -mcx16 is needed to avoid calls to libatomic.
-CXXFLAGS+=	-mcx16 -fno-exceptions -fno-rtti
+# C++ dialect options.
+CXXFLAGS+=	-fno-exceptions -fno-rtti
 CXXSTD?=	c++20
 
 # Require an explicit call from libthr to clean up thread-local state
