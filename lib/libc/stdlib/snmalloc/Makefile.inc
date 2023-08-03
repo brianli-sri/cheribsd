@@ -24,10 +24,6 @@ CXXFLAGS+=	-DSNMALLOC_PLATFORM_HAS_GETENTROPY
 # Prefix all of these functions with double underscore:
 CXXFLAGS+=	-DSNMALLOC_STATIC_LIBRARY_PREFIX=__
 
-# libc is not dlopened, use initial-exec allow fast access to the thread-local
-# allocator (fast path for malloc and free)
-CXXFLAGS+=	-ftls-model=initial-exec
-
 .if ${MK_MALLOC_PRODUCTION} != "yes" || !defined(MALLOC_PRODUCTION)
 CXXFLAGS+=	-DSNMALLOC_CHECK_CLIENT
 CXXFLAGS+=	-DSNMALLOC_FAIL_FAST=false
