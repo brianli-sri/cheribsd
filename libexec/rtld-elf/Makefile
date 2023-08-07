@@ -117,6 +117,9 @@ CFLAGS+=	-I${RTLD_ELF_DIR}/cheri
 .endif
 
 .if ${MACHINE_ABI:Mpurecap}
+.if defined(RTLD_SANDBOX)
+SRCS+=		rtld_c18n.c rtld_machdep_c18n.S
+.endif
 .PATH: ${SRCTOP}/lib/libmalloc_simple
 SRCS+=		heap.c malloc.c
 
