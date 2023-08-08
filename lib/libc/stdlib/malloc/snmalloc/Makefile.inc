@@ -1,8 +1,8 @@
-.PATH: ${LIBC_SRCTOP}/stdlib/snmalloc
+.PATH: ${LIBC_SRCTOP}/stdlib/malloc/snmalloc
 
 MISRCS+=	malloc.cc
 
-SYM_MAPS+=	${LIBC_SRCTOP}/stdlib/snmalloc/Symbol.map
+SYM_MAPS+=	${LIBC_SRCTOP}/stdlib/malloc/Symbol.map
 
 # Specify the locations in contrib for headers.
 CXXFLAGS+=	-I${SRCTOP}/contrib/snmalloc/src/snmalloc

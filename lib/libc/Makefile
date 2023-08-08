@@ -132,9 +132,9 @@ NOASM=
 .include "${LIBC_SRCTOP}/stdio/Makefile.inc"
 .include "${LIBC_SRCTOP}/stdlib/Makefile.inc"
 .if ${MK_SNMALLOC} != "no"
-.include "${LIBC_SRCTOP}/stdlib/snmalloc/Makefile.inc"
+.include "${LIBC_SRCTOP}/stdlib/malloc/snmalloc/Makefile.inc"
 .else
-.include "${LIBC_SRCTOP}/stdlib/jemalloc/Makefile.inc"
+.include "${LIBC_SRCTOP}/stdlib/malloc/jemalloc/Makefile.inc"
 .endif
 .include "${LIBC_SRCTOP}/stdtime/Makefile.inc"
 .include "${LIBC_SRCTOP}/string/Makefile.inc"
