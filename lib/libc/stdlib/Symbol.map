@@ -47,7 +47,6 @@ FBSD_1.0 {
 	lldiv;
 	lsearch;
 	lfind;
-	malloc_revoke;
 	mergesort;
 	putenv;
 	qsort;
