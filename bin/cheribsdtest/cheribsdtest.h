@@ -146,6 +146,7 @@ struct cheri_test {
 	const char	*ct_name;
 	const char	*ct_desc;
 	void		(*ct_func)(const struct cheri_test *);
+	void		(*ct_child_func)(const struct cheri_test *);
 	const char *	(*ct_check_skip)(const char *);
 	const char *	(*ct_check_xfail)(const char *);
 	u_int		 ct_flags;
@@ -303,6 +304,14 @@ _cheribsdtest_check_errno(const char *context, int actual, int expected)
 /* For libc_memcpy and libc_memset tests and the unaligned copy tests: */
 extern void *cheribsdtest_memcpy(void *dst, const void *src, size_t n);
 extern void *cheribsdtest_memmove(void *dst, const void *src, size_t n);
+
+/*
+  * (co)exec a new copy of cheribsdtest and run the test's associated child
+  * function.
+  */
+//extern void cheribsdtest_coexec_child(const struct cheri_test *ctp);
+extern void cheribsdtest_exec_child(const struct cheri_test *ctp);
+
 
 extern ptraddr_t find_address_space_gap(size_t len, size_t align);
 
