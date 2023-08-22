@@ -312,7 +312,16 @@ extern void *cheribsdtest_memmove(void *dst, const void *src, size_t n);
 //extern void cheribsdtest_coexec_child(const struct cheri_test *ctp);
 extern void cheribsdtest_exec_child(const struct cheri_test *ctp);
 
-
+extern int cheribsdtest_posix_spawn(const struct cheri_test *ctp, int *pid);
+extern pid_t cheribsdtest_spawn_child(const struct cheri_test *ctp, int mode);
 extern ptraddr_t find_address_space_gap(size_t len, size_t align);
+
+enum
+{
+	SC_MODE_POSIX = 0,
+	SC_MODE_FORK = 1,
+	SC_MODE_VFORK = 2,
+	SC_MODE_RFORK = 3,
+};
 
 #endif /* !_CHERIBSDTEST_H_ */

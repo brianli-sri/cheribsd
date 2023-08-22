@@ -60,6 +60,7 @@
 #include <fnmatch.h>
 #include <inttypes.h>
 #include <signal.h>
+#include <spawn.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -700,6 +701,55 @@ static void
  	execve(exec_args[0], exec_args, NULL);
  	err(EX_OSERR, "%s: execve", __func__);
  }
+
+//need to add in stuff to make it work with posix_spawn
+extern char **environ;
+
+int cheribsdtest_posix_spawn(const struct cheri_test *ctp, int *pid)
+{
+	char **exec_args;
+	int status;
+
+	exec_args = mk_exec_args(ctp);
+ 	status = posix_spawn(pid, exec_args[0], NULL, NULL, exec_args, environ);
+	return status;
+}
+
+pid_t
+cheribsdtest_spawn_child(const struct cheri_test *ctp, int mode)
+{
+
+	pid_t pid;
+
+	switch (mode) {
+		case SC_MODE_POSIX:
+		{
+			char **exec_args;
+			int status;
+
+			exec_args = mk_exec_args(ctp);
+			status = posix_spawn(&pid, exec_args[0], NULL, NULL, exec_args, environ);
+			break;
+		}
+		case SC_MODE_FORK:
+			pid = fork();
+			break;
+		case SC_MODE_RFORK:
+			pid = rfork(RFPROC);
+			break;
+		case SC_MODE_VFORK:
+			pid = vfork();
+			break;
+		default:
+			pid = -1;
+			break;
+	}
+	if (mode != SC_MODE_POSIX && pid == 0){
+		cheribsdtest_exec_child(ctp);
+	}
+
+	return pid;
+}
 
 __noinline void *
 cheribsdtest_memcpy(void *dst, const void *src, size_t n)

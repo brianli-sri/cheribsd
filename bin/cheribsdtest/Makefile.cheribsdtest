@@ -33,7 +33,7 @@ SRCS+=	cheribsdtest_bounds_subobject.c					\
 	cheribsdtest_bounds_varargs.c					\
 	cheribsdtest_sentries.c
 
-SRCS+=		cheribsdtest_colocation.c
+SRCS+=		cheribsdtest_exec.c
 .endif
 
 CHERIBSDTEST_DIR:=	${.PARSEDIR}

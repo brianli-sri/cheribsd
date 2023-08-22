@@ -2097,6 +2097,7 @@ CHERIBSDTEST(cheri_revoke_lib_fork,
 CHERIBSDTEST(cheri_revoke_lib_fork_split,
     "Test libcheri_caprevoke split across fork")
 {
+	static const int verbose = 0;
 	static const int paranoia = 2;
 
 	static const size_t bigblock_caps = 4096;
@@ -2247,8 +2248,8 @@ CHERIBSDTEST(cheri_revoke_lib_fork_split_vfork,
 }
 
 static void
-cheri_revoke_lib_child_once(const struct cheri_test * __unused ctp){
-
+cheri_revoke_lib_child_once(const struct cheri_test * __unused ctp)
+{
 	static const int paranoia = 2;
 
 	static const size_t bigblock_caps = 4096;
@@ -2270,7 +2271,8 @@ cheri_revoke_lib_child_once(const struct cheri_test * __unused ctp){
 }
 
 static void
-cheri_revoke_lib_child_split(const struct cheri_test * __unused ctp){
+cheri_revoke_lib_child_split(const struct cheri_test * __unused ctp)
+{
 	static const int paranoia = 2;
 
 	static const size_t bigblock_caps = 4096;
@@ -2320,14 +2322,65 @@ cheri_revoke_test_init(int run)
 	}
 }
 
-CHERIBSDTEST(cheri_revoke_lib_fork_split_exec_child_once,
-    "Test libcheri_caprevoke split across fork and exec, LOAD_ONCE",
+CHERIBSDTEST(cheri_revoke_posix_spawn_once, 
+	"Test cheri_revoke with posix_spawn",
+	.ct_child_func=cheri_revoke_lib_child_once)
+{
+	cheri_revoke_test_init(1);
+
+	int pid, status;
+	
+	status = cheribsdtest_posix_spawn(ctp, &pid);
+	fprintf(stderr, "status: %d, pid: %d\n", status, pid);
+	if (pid == 0) {
+		cheribsdtest_exec_child(ctp);
+	} else {
+		int res;
+
+		CHERIBSDTEST_VERIFY2(pid > 0, "fork failed");
+		waitpid(pid, &res, 0);
+		if (res != 0) {
+			cheribsdtest_failure_errx("Bad child process exit");
+		}
+	}
+
+	cheribsdtest_success();
+}
+
+CHERIBSDTEST(cheri_revoke_posix_spawn_split, 
+	"Test cheri_revoke with posix_spawn",
+	.ct_child_func=cheri_revoke_lib_child_split)
+{
+	cheri_revoke_test_init(1);
+
+	int pid, status;
+	
+	status = cheribsdtest_posix_spawn(ctp, &pid);
+	fprintf(stderr, "status: %d, pid: %d\n", status, pid);
+	if (pid == 0) {
+		cheribsdtest_exec_child(ctp);
+	} else {
+		int res;
+
+		CHERIBSDTEST_VERIFY2(pid > 0, "fork failed");
+		waitpid(pid, &res, 0);
+		if (res != 0) {
+			cheribsdtest_failure_errx("Bad child process exit");
+		}
+	}
+
+	cheribsdtest_success();
+}
+
+CHERIBSDTEST(cheri_revoke_lib_fork_exec_child_once,
+    "Test libcheri_caprevoke across fork and exec, LOAD_ONCE",
     .ct_child_func = cheri_revoke_lib_child_once)
 {
 	
 	cheri_revoke_test_init(1);
 
 	int pid;
+
 	pid = fork();
 	if (pid == 0) {
 		cheribsdtest_exec_child(ctp);
@@ -2341,18 +2394,17 @@ CHERIBSDTEST(cheri_revoke_lib_fork_split_exec_child_once,
 		}
 	}
 
-	//munmap(bigblock, bigblock_caps * sizeof(void * __capability));
-
 	cheribsdtest_success();
 }
 
-CHERIBSDTEST(cheri_revoke_lib_fork_split_exec_child_split,
-    "Test libcheri_caprevoke split across fork and exec, LOAD_SPLIT",
+CHERIBSDTEST(cheri_revoke_lib_fork_exec_child_split,
+    "Test libcheri_caprevoke across fork and exec, LOAD_SPLIT",
     .ct_child_func = cheri_revoke_lib_child_split)
 {
 	cheri_revoke_test_init(1);
 
 	int pid;
+
 	pid = fork();
 	if (pid == 0) {
 		cheribsdtest_exec_child(ctp);
@@ -2366,18 +2418,17 @@ CHERIBSDTEST(cheri_revoke_lib_fork_split_exec_child_split,
 		}
 	}
 
-	//munmap(bigblock, bigblock_caps * sizeof(void * __capability));
-
 	cheribsdtest_success();
 }
 
-CHERIBSDTEST(cheri_revoke_lib_fork_split_exec_child_once_no_parent,
-    "Test libcheri_caprevoke split across fork and exec, LOAD_ONCE, no parent revoke",
+CHERIBSDTEST(cheri_revoke_lib_fork_exec_child_once_no_parent,
+    "Test libcheri_caprevoke across fork and exec, LOAD_ONCE, no parent revoke",
     .ct_child_func = cheri_revoke_lib_child_once)
 {
 	cheri_revoke_test_init(0);
 
 	int pid;
+
 	pid = fork();
 	if (pid == 0) {
 		cheribsdtest_exec_child(ctp);
@@ -2391,16 +2442,158 @@ CHERIBSDTEST(cheri_revoke_lib_fork_split_exec_child_once_no_parent,
 		}
 	}
 
-	//munmap(bigblock, bigblock_caps * sizeof(void * __capability));
+	cheribsdtest_success();
+}
+
+CHERIBSDTEST(cheri_revoke_lib_fork_exec_child_split_no_parent,
+    "Test libcheri_caprevoke across fork and exec, LOAD_SPLIT, no parent revoke",
+    .ct_child_func = cheri_revoke_lib_child_split)
+{
+	cheri_revoke_test_init(0);
+
+	int pid;
+
+	pid = fork();
+	if (pid == 0) {
+		cheribsdtest_exec_child(ctp);
+	} else {
+		int res;
+
+		CHERIBSDTEST_VERIFY2(pid > 0, "fork failed");
+		waitpid(pid, &res, 0);
+		if (res != 0) {
+			cheribsdtest_failure_errx("Bad child process exit");
+		}
+	}
 
 	cheribsdtest_success();
 }
 
-CHERIBSDTEST(cheri_revoke_lib_fork_split_exec_child_split_no_parent,
-    "Test libcheri_caprevoke split across fork and exec, LOAD_SPLIT, no parent revoke",
-    .ct_child_func = cheri_revoke_lib_child_split)
+static void
+cheri_revoke_lib_child_check_epoch_once(const struct cheri_test * __unused ctp){
+	static const int paranoia = 2;
+
+	static const size_t bigblock_caps = 4096;
+
+	void * __capability * __capability bigblock;
+	void * __capability shadow;
+	const volatile struct cheri_revoke_info * __capability cri;
+
+	srand(1337);
+
+	cheribsdtest_cheri_revoke_lib_init(bigblock_caps, &bigblock, &shadow,
+	    &cri);
+
+	uint64_t epoch_en;
+	uint64_t epoch_de;
+
+	epoch_en = cri->epochs.enqueue;
+	epoch_de = cri->epochs.dequeue;
+
+	if(epoch_en != 0 || epoch_de != 0){
+		exit(1);
+	}
+
+	fprintf(stderr, "epoch_en %lu\n", epoch_en);
+	fprintf(stderr, "epoch_de %lu\n", epoch_de);
+
+	cheribsdtest_cheri_revoke_lib_run(paranoia,
+	    TCLR_MODE_LOAD_ONCE, bigblock_caps, bigblock,
+	    shadow, cri);
+
+	epoch_en = cri->epochs.enqueue;
+	epoch_de = cri->epochs.dequeue;
+
+	fprintf(stderr, "epoch_en %lu\n", epoch_en);
+	fprintf(stderr, "epoch_de %lu\n", epoch_de);
+
+	exit(0);
+}
+
+static void
+cheri_revoke_lib_child_check_epoch_split(const struct cheri_test * __unused ctp){
+	static const int paranoia = 2;
+
+	static const size_t bigblock_caps = 4096;
+
+	void * __capability * __capability bigblock;
+	void * __capability shadow;
+	const volatile struct cheri_revoke_info * __capability cri;
+
+	srand(1337);
+
+	cheribsdtest_cheri_revoke_lib_init(bigblock_caps, &bigblock, &shadow,
+	    &cri);
+
+	uint64_t epoch_en;
+	uint64_t epoch_de;
+
+	epoch_en = cri->epochs.enqueue;
+	epoch_de = cri->epochs.dequeue;
+
+	if(epoch_en != 0 || epoch_de != 0){
+		exit(1);
+	}
+
+	fprintf(stderr, "epoch_en %lu\n", epoch_en);
+	fprintf(stderr, "epoch_de %lu\n", epoch_de);
+
+	cheribsdtest_cheri_revoke_lib_run(paranoia,
+	    TCLR_MODE_LOAD_SPLIT, bigblock_caps, bigblock,
+	    shadow, cri);
+
+	epoch_en = cri->epochs.enqueue;
+	epoch_de = cri->epochs.dequeue;
+
+	fprintf(stderr, "epoch_en %lu\n", epoch_en);
+	fprintf(stderr, "epoch_de %lu\n", epoch_de);
+
+	exit(0);
+}
+
+CHERIBSDTEST(cheri_revoke_lib_fork_exec_child_once_check_epoch,
+    "Test libcheri_caprevoke split across fork and exec, checking epoch",
+    .ct_child_func = cheri_revoke_lib_child_check_epoch_once)
 {
-	cheri_revoke_test_init(0);
+	static const int verbose = 0;
+	static const int paranoia = 2;
+
+	static const size_t bigblock_caps = 4096;
+
+	void * __capability * __capability bigblock;
+	void * __capability shadow;
+	const volatile struct cheri_revoke_info * __capability cri;
+
+	srand(1337);
+
+	cheribsdtest_cheri_revoke_lib_init(bigblock_caps, &bigblock, &shadow,
+	    &cri);
+
+	if (verbose > 0) {
+		fprintf(stderr, "bigblock: %#.16lp\n", bigblock);
+		fprintf(stderr, "shadow: %#.16lp\n", shadow);
+	}
+
+	uint64_t epoch_en;
+	uint64_t epoch_de;
+
+	epoch_en = cri->epochs.enqueue;
+	epoch_de = cri->epochs.dequeue;
+
+	fprintf(stderr, "epoch_en %lu\n", epoch_en);
+	fprintf(stderr, "epoch_de %lu\n", epoch_de);
+
+	/* Open the epoch and begin revocation */
+	cheribsdtest_cheri_revoke_lib_run(paranoia,
+	    TCLR_MODE_LOAD_ONCE, bigblock_caps, bigblock, shadow, cri);
+
+	fprintf(stderr, "after parent revoke\n");
+
+	epoch_en = cri->epochs.enqueue;
+	epoch_de = cri->epochs.dequeue;
+
+	fprintf(stderr, "epoch_en %lu\n", epoch_en);
+	fprintf(stderr, "epoch_de %lu\n", epoch_de);
 
 	int pid;
 	pid = fork();
@@ -2421,6 +2614,155 @@ CHERIBSDTEST(cheri_revoke_lib_fork_split_exec_child_split_no_parent,
 	cheribsdtest_success();
 }
 
+CHERIBSDTEST(cheri_revoke_lib_fork_exec_child_split_check_epoch,
+    "Test libcheri_caprevoke split across fork and exec, checking epoch",
+    .ct_child_func = cheri_revoke_lib_child_check_epoch_split)
+{
+	static const int verbose = 0;
+	static const int paranoia = 2;
+
+	static const size_t bigblock_caps = 4096;
+
+	void * __capability * __capability bigblock;
+	void * __capability shadow;
+	const volatile struct cheri_revoke_info * __capability cri;
+
+	srand(1337);
+
+	cheribsdtest_cheri_revoke_lib_init(bigblock_caps, &bigblock, &shadow,
+	    &cri);
+
+	if (verbose > 0) {
+		fprintf(stderr, "bigblock: %#.16lp\n", bigblock);
+		fprintf(stderr, "shadow: %#.16lp\n", shadow);
+	}
+
+	uint64_t epoch_en;
+	uint64_t epoch_de;
+
+	epoch_en = cri->epochs.enqueue;
+	epoch_de = cri->epochs.dequeue;
+
+	fprintf(stderr, "epoch_en %lu\n", epoch_en);
+	fprintf(stderr, "epoch_de %lu\n", epoch_de);
+
+	/* Open the epoch and begin revocation */
+	cheribsdtest_cheri_revoke_lib_run(paranoia,
+	    TCLR_MODE_LOAD_SPLIT, bigblock_caps, bigblock, shadow, cri);
+
+	fprintf(stderr, "after parent revoke\n");
+
+	epoch_en = cri->epochs.enqueue;
+	epoch_de = cri->epochs.dequeue;
+
+	fprintf(stderr, "epoch_en %lu\n", epoch_en);
+	fprintf(stderr, "epoch_de %lu\n", epoch_de);
+
+	int pid;
+
+	pid = fork();
+	if (pid == 0) {
+		cheribsdtest_exec_child(ctp);
+	} else {
+		int res;
+
+		CHERIBSDTEST_VERIFY2(pid > 0, "fork failed");
+		waitpid(pid, &res, 0);
+		if (res != 0) {
+			cheribsdtest_failure_errx("Bad child process exit");
+		}
+	}
+
+	cheribsdtest_success();
+}
+
+CHERIBSDTEST(cheri_revoke_lib_spawn_child_posix,
+    "Test libcheri_caprevoke using cheribsdtest_spawn_child, SC_MODE_POSIX",
+    .ct_child_func = cheri_revoke_lib_child_once)
+{
+	
+	cheri_revoke_test_init(1);
+
+	int pid;
+
+	pid = cheribsdtest_spawn_child(ctp, SC_MODE_POSIX);
+
+	int res;
+
+	CHERIBSDTEST_VERIFY2(pid > 0, "fork failed");
+	waitpid(pid, &res, 0);
+	if (res != 0) {
+		cheribsdtest_failure_errx("Bad child process exit");
+	}
+
+	cheribsdtest_success();
+}
+
+CHERIBSDTEST(cheri_revoke_lib_spawn_child_fork,
+    "Test libcheri_caprevoke using cheribsdtest_spawn_child, SC_MODE_FORK",
+    .ct_child_func = cheri_revoke_lib_child_once)
+{
+	
+	cheri_revoke_test_init(1);
+
+	int pid;
+
+	pid = cheribsdtest_spawn_child(ctp, SC_MODE_FORK);
+
+	int res;
+
+	CHERIBSDTEST_VERIFY2(pid > 0, "fork failed");
+	waitpid(pid, &res, 0);
+	if (res != 0) {
+		cheribsdtest_failure_errx("Bad child process exit");
+	}
+
+	cheribsdtest_success();
+}
+
+CHERIBSDTEST(cheri_revoke_lib_spawn_child_rfork,
+    "Test libcheri_caprevoke using cheribsdtest_spawn_child, SC_MODE_RFORK",
+    .ct_child_func = cheri_revoke_lib_child_once)
+{
+	
+	cheri_revoke_test_init(1);
+
+	int pid;
+
+	pid = cheribsdtest_spawn_child(ctp, SC_MODE_RFORK);
+
+	int res;
+
+	CHERIBSDTEST_VERIFY2(pid > 0, "fork failed");
+	waitpid(pid, &res, 0);
+	if (res != 0) {
+		cheribsdtest_failure_errx("Bad child process exit");
+	}
+
+	cheribsdtest_success();
+}
+
+CHERIBSDTEST(cheri_revoke_lib_spawn_child_vfork,
+    "Test libcheri_caprevoke using cheribsdtest_spawn_child, SC_MODE_VFORK",
+    .ct_child_func = cheri_revoke_lib_child_once)
+{
+	
+	cheri_revoke_test_init(1);
+
+	int pid;
+
+	pid = cheribsdtest_spawn_child(ctp, SC_MODE_VFORK);
+
+	int res;
+
+	CHERIBSDTEST_VERIFY2(pid > 0, "fork failed");
+	waitpid(pid, &res, 0);
+	if (res != 0) {
+		cheribsdtest_failure_errx("Bad child process exit");
+	}
+
+	cheribsdtest_success();
+}
 
 CHERIBSDTEST(revoke_largest_quarantined_reservation,
     "Verify that the largest quarantined reservation is revoked",
